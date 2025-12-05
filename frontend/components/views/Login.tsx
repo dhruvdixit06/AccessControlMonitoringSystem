@@ -10,15 +10,22 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRole) return;
+    setError('');
     
     setIsLoading(true);
-    // Simulate API call
+    
+    // Simulate API call and validate credentials
     setTimeout(() => {
-        onLogin(selectedRole);
+        if (email === 'test@xyz.com' && password === '123') {
+           onLogin(selectedRole);
+        } else {
+           setError('Invalid email or password. Please try again.');
+        }
         setIsLoading(false);
     }, 800);
   };
@@ -122,6 +129,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </div>
 
           <form className="space-y-6" onSubmit={handleLogin}>
+            {error && (
+                <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-200">
+                    {error}
+                </div>
+            )}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address

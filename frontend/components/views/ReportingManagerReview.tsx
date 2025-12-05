@@ -1,20 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import Sidebar from '../common/Sidebar';
 import Header from '../common/Header';
-
-// Extended User interface for this view
-interface ReviewUser {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  status: 'Pending' | 'Retained' | 'Revoked' | 'Modified' | 'Completed';
-  avatarUrl: string;
-  application: string;
-  comment?: string;
-  lastModified?: string; // Added for history
-  lastAction?: string;   // Added for history
-}
+import { useData, AccessRecord } from '../context/DataContext';
 
 interface SubmissionModalState {
   open: boolean;
@@ -27,11 +14,16 @@ interface SubmissionModalState {
   onConfirm?: () => void;
 }
 
-const ReportingManagerReview: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'dashboard' | 'reviews' | 'history'>('dashboard');
+interface Props {
+  onLogout: () => void;
+}
+
+const ReportingManagerReview: React.FC<Props> = ({ onLogout }) => {
+  const { accessRecords, performReviewAction, reviewCycles } = useData();
+  const [currentView, setCurrentView] = useState<'dashboard' | 'reviews' | 'history' | 'applications' | 'cycles'>('dashboard');
   const [selectedAppFilter, setSelectedAppFilter] = useState<string>('All Applications');
   const [commentModalOpen, setCommentModalOpen] = useState(false);
-  const [selectedUserForComment, setSelectedUserForComment] = useState<ReviewUser | null>(null);
+  const [selectedUserForComment, setSelectedUserForComment] = useState<AccessRecord | null>(null);
   const [commentText, setCommentText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
@@ -46,35 +38,21 @@ const ReportingManagerReview: React.FC = () => {
 
   const user = {
     name: 'John Doe',
-    role: 'Reporting Manager',
+    role: 'App Owner',
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCUZzUnyH2EJMpe2PkzwAygrxm9FPHxmPc5072r8l4BeQKywRO3TgTBZeqQBs_L2Ia6tn-FzP7bMEKCPBG9XxiE3TLo4gnLQmG2GfgEFvoxTKG7eQTVcnfdLcjYr3k_PpbxShZAZdSoRtXxqWqFHDDJDt8wSma49cGuzTZEaRl3YroEZIFj_YOroNgcDI5VUeL6-eiv12IIWpKFeXJpthNhe-51lJn2l0SqPiXGSnk_2x4HIMPBdZiqRzkFCM9KJUmVWyMKPYYv7ZKN'
   };
 
-  const initialUsers: ReviewUser[] = [
-    { id: '1', name: 'Alice Johnson', email: 'alice.j@example.com', role: 'Admin', status: 'Pending', application: 'Salesforce', avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAUtzzSR17hSta0_wWzQ1Xn5S0Bsjd2GQXlAp_Edhtt6gFY3uH9bIt7EIGtTewHG0NrVHj2-0h4aEG839_XjICGQPpfXDvQry9rJfNq8wZByg9c2I5kRgfWNJrnG1IB0KbiIgwyhlKV-5ps4XMvDVt4MgDI8GXF9shFSzlGCDzlDwO1ar51JJm8wZUWsma2rJejqgFvvni0r7RX9qZXSzxm_u1FxD4Lp5kx0IcZ427C38Re1n8HFpGgsQU_Ht2EWXHT7_1Swq3W9tUO' },
-    { id: '2', name: 'Bob Williams', email: 'bob.w@example.com', role: 'Editor', status: 'Retained', application: 'Jira', avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAgmPg04XThekyFfWSQLCZ3hrGs2juXjviNs5HQ1qN0K6DfArQRJUXhi9eajr-fJPBQxU-uHBy2BkOHu2ZZilKst-Z9mWgbgHDSpx4nnMak3tb31e_drAYTDh5Jefe9PINmlT09pwfp4V1g_q8WQuyxng_KlsCDOFqsMf2Cb1B1lk9PF3LxTt0llmAXcAXia2BmYxHsOutFsV4KQPWX45pRkYy6QdAITsph7eU_XH6EW2Ybsjk0X9aPtLPJVSYJCptOOv_yFL52dmgf' },
-    { id: '3', name: 'Charlie Brown', email: 'charlie.b@example.com', role: 'Viewer', status: 'Revoked', application: 'Salesforce', avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBAf2J2q5FNFfIAACwVt2FhD8s_MaRx53G5vGNnWALEApxnZRLMcApiqYF6EjwCiqFRwQmU2VGtpOk_qspiVyeKERFDRN3vSnIIkPzf1vsUmFe_Sr6OljwsKbnyvqJQiAOFhzdyD4JRlG7yplVqPL1FJYlWeg1DvVaVs6xPM8nTh0QlbyC5Oya59OzP8cgzFT_P8tDoLyhGHN0Enn4YYUs0AoEa4KHUVSJsM3u6rRQZwcVeb0DYq_w4rJdmgZn6TT9i1FZFwtRUSu-d' },
-    { id: '4', name: 'Diana Prince', email: 'diana.p@example.com', role: 'Admin', status: 'Modified', application: 'GitHub', avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuASqNknuB3X-ABZ9l_J8ylyq59nQegwV9h9ROwgYxoTXqIWmO1Rotw04uawPNa2qXWGYhFBkGRps-3wmkVwwcGLKVrP3BjBczPlBOiQAv6CjkPolDV8DjOPmUFe_b7oEgzyw1L4fAaUuYesPGu6gC25IaLEOp6NuArDR47aOmgUqrgj0AObD0MWUGTmrG4LlGxzEo5sT4xqWHlkbuK8QpJuBngOi5y0hZ5rBI3cTjrw7DyDh2aKziKnbghTmYeQM4eRjIyuKlDmD_kr' },
-    { id: '5', name: 'Evan Wright', email: 'evan.w@example.com', role: 'Viewer', status: 'Pending', application: 'Jira', avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDNBDAyfgKSYML3GGf-DqwNxqlgUcv24wZ0VmT-zF5ZYqJe09TCP6VE0HW5TpqfOFZy2gqK8LVOHz9wLRPWbHkJmmC2UIPj_goKpNcqYSAdaZO9li0GBmGLnpWzJZWmZ_KmxLrQE6JGZT5QvLMlBdyETSOljFK8WnX_uphNjZ4-FbiE5ClEB-BE11JCVImMPxWcl4ffzMwxpvTlldbf5yw_BISbycWZzJt10lwn8BgeLe9x3j_s1WESZSiDStxYjZGU3HzHq9MjnzAi' },
-    { id: '6', name: 'Fiona Gallagher', email: 'fiona.g@example.com', role: 'Editor', status: 'Pending', application: 'Slack', avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB3j4qcYNrSl_8rtn9FJ8NZHlJshHZbE_ZAF2HElYOUgo4BbYsqJDiHd8WbpS2F9yiwvY5ylQEZYCVGmKXgy0YwnnGsJwRQmyINkNEXVCsZV-kfbf2JHTaqGLxSe1BVzsI5PpqIoaJLfZZgHcSrMb7gRSN2Vq-jUA8W6RiUbexvQyD3Bvk-wORQrTXNJBzPBxRowMjEGE4FoVOS7GoIm4QDYtVkgf5ylqKINaEZolYqboQYuEkaLNKqywsXVsXYWAoprNhIlHGSuEJE' },
-  ];
-
-  // Dummy data for History view initialization
-  const initialHistoryUsers: ReviewUser[] = [
-    { id: 'h1', name: 'George Martin', email: 'george.m@example.com', role: 'Viewer', status: 'Completed', application: 'Jira', avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDNBDAyfgKSYML3GGf-DqwNxqlgUcv24wZ0VmT-zF5ZYqJe09TCP6VE0HW5TpqfOFZy2gqK8LVOHz9wLRPWbHkJmmC2UIPj_goKpNcqYSAdaZO9li0GBmGLnpWzJZWmZ_KmxLrQE6JGZT5QvLMlBdyETSOljFK8WnX_uphNjZ4-FbiE5ClEB-BE11JCVImMPxWcl4ffzMwxpvTlldbf5yw_BISbycWZzJt10lwn8BgeLe9x3j_s1WESZSiDStxYjZGU3HzHq9MjnzAi', lastAction: 'Revoked Access', lastModified: 'Oct 24, 2024' },
-    { id: 'h2', name: 'Hannah Lee', email: 'hannah.l@example.com', role: 'Editor', status: 'Completed', application: 'Salesforce', avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB3j4qcYNrSl_8rtn9FJ8NZHlJshHZbE_ZAF2HElYOUgo4BbYsqJDiHd8WbpS2F9yiwvY5ylQEZYCVGmKXgy0YwnnGsJwRQmyINkNEXVCsZV-kfbf2JHTaqGLxSe1BVzsI5PpqIoaJLfZZgHcSrMb7gRSN2Vq-jUA8W6RiUbexvQyD3Bvk-wORQrTXNJBzPBxRowMjEGE4FoVOS7GoIm4QDYtVkgf5ylqKINaEZolYqboQYuEkaLNKqywsXVsXYWAoprNhIlHGSuEJE', lastAction: 'Retained Access', lastModified: 'Oct 22, 2024' },
-    { id: 'h3', name: 'Ian Scott', email: 'ian.s@example.com', role: 'Admin', status: 'Modified', application: 'GitHub', avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuASqNknuB3X-ABZ9l_J8ylyq59nQegwV9h9ROwgYxoTXqIWmO1Rotw04uawPNa2qXWGYhFBkGRps-3wmkVwwcGLKVrP3BjBczPlBOiQAv6CjkPolDV8DjOPmUFe_b7oEgzyw1L4fAaUuYesPGu6gC25IaLEOp6NuArDR47aOmgUqrgj0AObD0MWUGTmrG4LlGxzEo5sT4xqWHlkbuK8QpJuBngOi5y0hZ5rBI3cTjrw7DyDh2aKziKnbghTmYeQM4eRjIyuKlDmD_kr', lastAction: 'Modified Role to Reader', lastModified: 'Oct 20, 2024' },
-  ];
-
-  const [users, setUsers] = useState<ReviewUser[]>(initialUsers);
-  const [history, setHistory] = useState<ReviewUser[]>(initialHistoryUsers);
-
   // Derived state for Dashboard
+  // Apps assigned to this user (Mocked: John Doe sees John Doe managed apps)
+  const myAccessRecords = useMemo(() => {
+     return accessRecords.filter(r => r.manager === 'John Doe');
+  }, [accessRecords]);
+
   const applications = useMemo(() => {
-    const apps = Array.from(new Set(users.map(u => u.application)));
+    const apps = Array.from(new Set(myAccessRecords.map(u => u.application)));
     return apps.map(appName => {
-      const appUsers = users.filter(u => u.application === appName);
-      const pendingCount = appUsers.filter(u => u.status === 'Pending').length;
+      const appUsers = myAccessRecords.filter(u => u.application === appName);
+      const pendingCount = appUsers.filter(u => u.reviewStatus === 'Pending').length;
       const totalCount = appUsers.length;
       return {
         name: appName,
@@ -83,16 +61,18 @@ const ReportingManagerReview: React.FC = () => {
         status: pendingCount === 0 ? 'Completed' : 'In Progress'
       };
     });
-  }, [users]);
+  }, [myAccessRecords]);
 
-  const totalUsersToReview = users.length;
-  const totalReviewed = users.filter(u => u.status !== 'Pending').length;
-  const reviewProgress = Math.round((totalReviewed / totalUsersToReview) * 100);
+  const totalUsersToReview = myAccessRecords.length;
+  const totalReviewed = myAccessRecords.filter(u => u.reviewStatus !== 'Pending').length;
+  const reviewProgress = totalUsersToReview > 0 ? Math.round((totalReviewed / totalUsersToReview) * 100) : 0;
 
   // Filtered users for Review View and History View
   const filteredUsers = useMemo(() => {
-    // Determine which dataset to use based on view
-    let dataToFilter = currentView === 'history' ? history : users;
+    // History is any record that has been processed (not Pending)
+    let dataToFilter = currentView === 'history' 
+        ? myAccessRecords.filter(r => r.reviewStatus !== 'Pending') 
+        : myAccessRecords.filter(r => r.reviewStatus === 'Pending');
 
     // Apply Application Filter
     if (selectedAppFilter !== 'All Applications') {
@@ -103,15 +83,15 @@ const ReportingManagerReview: React.FC = () => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       dataToFilter = dataToFilter.filter(u => 
-        u.name.toLowerCase().includes(q) || 
-        u.email.toLowerCase().includes(q) ||
+        u.userName.toLowerCase().includes(q) || 
+        u.userEmail.toLowerCase().includes(q) ||
         u.application.toLowerCase().includes(q)
       );
     }
     return dataToFilter;
-  }, [users, history, selectedAppFilter, searchQuery, currentView]);
+  }, [myAccessRecords, selectedAppFilter, searchQuery, currentView]);
 
-  const getStatusBadge = (status: ReviewUser['status']) => {
+  const getStatusBadge = (status: AccessRecord['reviewStatus']) => {
     switch (status) {
       case 'Pending':
         return <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">Pending</span>;
@@ -121,73 +101,26 @@ const ReportingManagerReview: React.FC = () => {
         return <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">Revoked</span>;
       case 'Modified':
         return <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">Modified</span>;
-      case 'Completed':
-        return <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">Completed</span>;
+      case 'Approved':
+        return <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">Approved</span>;
       default:
         return null;
     }
   };
 
-  const updateHistory = (user: ReviewUser, actionText: string) => {
-    const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const historyItem: ReviewUser = {
-      ...user,
-      lastAction: actionText,
-      lastModified: date
-    };
-    
-    setHistory(prev => {
-      // Remove previous entry for this user if exists to show only latest action, or keep it. 
-      // For this implementation, let's keep latest action at the top.
-      const filtered = prev.filter(h => h.id !== user.id);
-      return [historyItem, ...filtered];
-    });
-  };
-
   const handleAction = (id: string, action: 'Retain' | 'Revoke') => {
-    const updatedUsers: ReviewUser[] = users.map(u => {
-      if (u.id === id) {
-        return { 
-          ...u, 
-          status: action === 'Retain' ? 'Retained' : 'Revoked'
-        };
-      }
-      return u;
-    });
-    setUsers(updatedUsers);
-    
-    // Update history
-    const user = updatedUsers.find(u => u.id === id);
-    if (user) {
-      updateHistory(user, action === 'Retain' ? 'Retained Access' : 'Revoked Access');
-    }
+    performReviewAction(id, action, undefined, user.name);
   };
 
-  const openCommentModal = (user: ReviewUser) => {
+  const openCommentModal = (user: AccessRecord) => {
     setSelectedUserForComment(user);
-    setCommentText(user.comment || '');
+    setCommentText(user.reviewComment || '');
     setCommentModalOpen(true);
   };
 
   const saveComment = () => {
     if (selectedUserForComment) {
-      const updatedUsers: ReviewUser[] = users.map(u => {
-        if (u.id === selectedUserForComment.id) {
-          return {
-            ...u,
-            status: 'Modified',
-            comment: commentText
-          };
-        }
-        return u;
-      });
-      setUsers(updatedUsers);
-
-      const user = updatedUsers.find(u => u.id === selectedUserForComment.id);
-      if (user) {
-        updateHistory(user, `Modified Access: ${commentText}`);
-      }
-
+      performReviewAction(selectedUserForComment.id, 'Modify', commentText, user.name);
       setCommentModalOpen(false);
       setSelectedUserForComment(null);
       setCommentText('');
@@ -237,7 +170,7 @@ const ReportingManagerReview: React.FC = () => {
   };
 
   const handleDone = () => {
-    const pendingCount = filteredUsers.filter(u => u.status === 'Pending').length;
+    const pendingCount = myAccessRecords.filter(u => u.reviewStatus === 'Pending').length;
 
     if (pendingCount === 0) {
       setSubmissionModal({
@@ -276,6 +209,7 @@ const ReportingManagerReview: React.FC = () => {
       <Sidebar
         title="Access Control"
         user={user}
+        onLogout={onLogout}
         menuItems={[
           { 
             icon: 'dashboard', 
@@ -306,6 +240,20 @@ const ReportingManagerReview: React.FC = () => {
               setCurrentView('history');
             }
           },
+          { 
+            icon: 'apps', 
+            label: 'Applications',
+            active: currentView === 'applications',
+            filled: currentView === 'applications',
+            onClick: () => setCurrentView('applications')
+          },
+          { 
+            icon: 'autorenew', 
+            label: 'Review Cycles',
+            active: currentView === 'cycles',
+            filled: currentView === 'cycles',
+            onClick: () => setCurrentView('cycles')
+          },
         ]}
       />
       
@@ -313,10 +261,10 @@ const ReportingManagerReview: React.FC = () => {
         <Header avatarUrl={user.avatar} />
         
         {/* Navigation override for small screens */}
-        <div className="md:hidden flex gap-2 p-2 bg-white border-b">
-           <button onClick={() => setCurrentView('dashboard')} className={`px-3 py-1 rounded ${currentView === 'dashboard' ? 'bg-primary text-white' : 'bg-gray-100'}`}>Dashboard</button>
-           <button onClick={() => setCurrentView('reviews')} className={`px-3 py-1 rounded ${currentView === 'reviews' ? 'bg-primary text-white' : 'bg-gray-100'}`}>Reviews</button>
-           <button onClick={() => setCurrentView('history')} className={`px-3 py-1 rounded ${currentView === 'history' ? 'bg-primary text-white' : 'bg-gray-100'}`}>History</button>
+        <div className="md:hidden flex gap-2 p-2 bg-white border-b overflow-x-auto">
+           <button onClick={() => setCurrentView('dashboard')} className={`px-3 py-1 rounded whitespace-nowrap ${currentView === 'dashboard' ? 'bg-primary text-white' : 'bg-gray-100'}`}>Dashboard</button>
+           <button onClick={() => setCurrentView('reviews')} className={`px-3 py-1 rounded whitespace-nowrap ${currentView === 'reviews' ? 'bg-primary text-white' : 'bg-gray-100'}`}>Reviews</button>
+           <button onClick={() => setCurrentView('history')} className={`px-3 py-1 rounded whitespace-nowrap ${currentView === 'history' ? 'bg-primary text-white' : 'bg-gray-100'}`}>History</button>
         </div>
 
         <main className="flex-1 overflow-y-auto pb-24">
@@ -404,6 +352,83 @@ const ReportingManagerReview: React.FC = () => {
               </div>
 
             </div>
+          ) : currentView === 'applications' ? (
+             <div className="max-w-7xl mx-auto p-6 lg:p-8 flex flex-col gap-8">
+               <div>
+                  <h1 className="text-text-light-primary text-2xl font-bold">My Applications</h1>
+                  <p className="text-gray-500 mt-1">Overview of applications you are responsible for.</p>
+               </div>
+               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Application</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Total Users</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Pending Review</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {applications.map((app) => (
+                        <tr key={app.name}>
+                          <td className="px-6 py-4 font-medium">{app.name}</td>
+                          <td className="px-6 py-4 text-gray-500">{app.userCount}</td>
+                          <td className="px-6 py-4 text-gray-500">{app.pendingCount}</td>
+                          <td className="px-6 py-4">
+                            {app.pendingCount === 0 ? (
+                               <span className="inline-flex items-center bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">Completed</span>
+                             ) : (
+                               <span className="inline-flex items-center bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">In Progress</span>
+                             )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+               </div>
+             </div>
+          ) : currentView === 'cycles' ? (
+             <div className="max-w-7xl mx-auto p-6 lg:p-8 flex flex-col gap-8">
+               <div>
+                  <h1 className="text-text-light-primary text-2xl font-bold">Review Cycles</h1>
+                  <p className="text-gray-500 mt-1">Review campaign history.</p>
+               </div>
+               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Cycle Name</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Duration</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Status</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Progress</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {reviewCycles.map((cycle, idx) => (
+                        <tr key={idx}>
+                          <td className="px-6 py-4 font-medium">{cycle.name}</td>
+                          <td className="px-6 py-4 text-gray-500">{cycle.startDate} - {cycle.endDate}</td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              cycle.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {cycle.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                             <div className="flex items-center gap-2">
+                              <div className="w-24 bg-gray-200 rounded-full h-2">
+                                <div className="bg-primary h-2 rounded-full" style={{ width: `${cycle.progress}%` }}></div>
+                              </div>
+                              <span className="text-xs text-gray-500">{cycle.progress}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+               </div>
+             </div>
           ) : (
             <div className="mx-auto max-w-7xl p-6 lg:p-8">
               
@@ -437,7 +462,7 @@ const ReportingManagerReview: React.FC = () => {
                         className="block w-full rounded-lg border-gray-300 bg-gray-50 py-2 pl-3 pr-10 text-sm text-gray-900 focus:border-primary focus:ring-primary focus:outline-none"
                       >
                         <option value="All Applications">All Applications</option>
-                        {Array.from(new Set([...initialUsers, ...history].map(u => u.application))).map(appName => (
+                        {Array.from(new Set(myAccessRecords.map(u => u.application))).map(appName => (
                           <option key={appName} value={appName}>{appName}</option>
                         ))}
                       </select>
@@ -498,40 +523,40 @@ const ReportingManagerReview: React.FC = () => {
                             </td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                               <div className="flex items-center gap-3">
-                                <img className="h-10 w-10 rounded-full" src={u.avatarUrl} alt="" />
+                                <img className="h-10 w-10 rounded-full" src={u.userAvatar} alt="" />
                                 <div>
-                                  <div className="font-medium text-gray-900">{u.name}</div>
-                                  <div className="text-gray-500">{u.email}</div>
+                                  <div className="font-medium text-gray-900">{u.userName}</div>
+                                  <div className="text-gray-500">{u.userEmail}</div>
                                 </div>
                               </div>
                             </td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.application}</td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.role}</td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                              {getStatusBadge(u.status)}
-                              {u.comment && <div className="text-xs text-gray-400 mt-1 max-w-[150px] truncate" title={u.comment}>{u.comment}</div>}
+                              {getStatusBadge(u.reviewStatus)}
+                              {u.reviewComment && <div className="text-xs text-gray-400 mt-1 max-w-[150px] truncate" title={u.reviewComment}>{u.reviewComment}</div>}
                             </td>
                             <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                               {currentView === 'history' ? (
                                 <div className="flex flex-col items-end">
-                                  <span className="text-gray-900 font-medium">{u.lastAction}</span>
-                                  <span className="text-gray-500 text-xs">{u.lastModified}</span>
+                                  <span className="text-gray-900 font-medium">{u.history[0]?.action}</span>
+                                  <span className="text-gray-500 text-xs">{u.history[0]?.date}</span>
                                 </div>
                               ) : (
                                 <div className="flex items-center justify-end gap-2">
                                   <button 
                                     onClick={() => handleAction(u.id, 'Retain')}
-                                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${u.status === 'Retained' ? 'border-green-500 bg-green-500/10 text-green-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+                                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${u.reviewStatus === 'Retained' ? 'border-green-500 bg-green-500/10 text-green-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
                                     Retain
                                   </button>
                                   <button 
                                     onClick={() => handleAction(u.id, 'Revoke')}
-                                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${u.status === 'Revoked' ? 'border-red-500 bg-red-500/10 text-red-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+                                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${u.reviewStatus === 'Revoked' ? 'border-red-500 bg-red-500/10 text-red-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
                                     Revoke
                                   </button>
                                   <button 
                                     onClick={() => openCommentModal(u)}
-                                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${u.status === 'Modified' ? 'border-yellow-500 bg-yellow-500/10 text-yellow-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+                                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${u.reviewStatus === 'Modified' ? 'border-yellow-500 bg-yellow-500/10 text-yellow-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
                                     More
                                   </button>
                                 </div>
@@ -589,7 +614,7 @@ const ReportingManagerReview: React.FC = () => {
             <div className="p-6 border-b border-gray-100">
               <h3 className="text-lg font-bold text-gray-900">Add Comment / Modify Access</h3>
               <p className="text-sm text-gray-500 mt-1">
-                Enter details for {selectedUserForComment.name} ({selectedUserForComment.application})
+                Enter details for {selectedUserForComment.userName} ({selectedUserForComment.application})
               </p>
             </div>
             <div className="p-6">

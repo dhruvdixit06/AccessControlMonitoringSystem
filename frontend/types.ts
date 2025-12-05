@@ -26,4 +26,4 @@ export interface ReviewItem {
   selected?: boolean;
 }
 
-export type ViewState = 'LOGIN' | 'APP_MANAGER' | 'REPORTING_MANAGER' | 'BUSINESS_OWNER' | 'ADMIN';
+export type ViewState = 'APP_MANAGER' | 'APP_OWNER' | 'BUSINESS_OWNER' | 'ADMIN' | 'LOGIN';

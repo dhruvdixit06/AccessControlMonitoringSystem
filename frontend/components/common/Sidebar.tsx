@@ -13,10 +13,11 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ icon, label, active, filled, 
     <a
       href="#"
       onClick={(e) => { e.preventDefault(); onClick?.(); }}
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${active
+      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+        active
           ? 'bg-primary/10 text-primary'
           : 'text-text-light-secondary hover:bg-primary/10 hover:text-primary'
-        }`}
+      }`}
     >
       <span className={`material-symbols-outlined !text-2xl ${filled ? 'filled' : ''}`}>
         {icon}
@@ -33,8 +34,8 @@ interface SidebarProps {
     role: string;
     avatar: string;
   };
-  onLogout?: () => void;
   menuItems: Array<{ icon: string; label: string; active?: boolean; filled?: boolean; onClick?: () => void }>;
+  onLogout?: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ title, user, menuItems, onLogout }) => {
@@ -59,24 +60,28 @@ const Sidebar: React.FC<SidebarProps> = ({ title, user, menuItems, onLogout }) =
 
       <div className="mt-auto flex flex-col gap-4">
         <SidebarItem icon="settings" label="Settings" />
-        <div className="flex gap-3 items-center border-t border-border-light pt-4">
-          <div
-            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10"
-            style={{ backgroundImage: `url("${user.avatar}")` }}
-          ></div>
-          <div className="flex flex-col">
-            <h1 className="text-text-light-primary text-base font-medium">{user.name}</h1>
-            <p className="text-text-light-secondary text-sm font-normal">{user.role}</p>
+        
+        <div className="flex flex-col gap-2 border-t border-border-light pt-4">
+           {onLogout && (
+             <button 
+                onClick={onLogout}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-text-light-secondary hover:bg-red-50 hover:text-red-600 text-left w-full"
+             >
+                <span className="material-symbols-outlined !text-2xl">logout</span>
+                <p className="text-sm font-medium">Sign Out</p>
+             </button>
+           )}
+           
+          <div className="flex gap-3 items-center pt-2">
+            <div
+              className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10"
+              style={{ backgroundImage: `url("${user.avatar}")` }}
+            ></div>
+            <div className="flex flex-col overflow-hidden">
+              <h1 className="text-text-light-primary text-base font-medium truncate">{user.name}</h1>
+              <p className="text-text-light-secondary text-sm font-normal truncate">{user.role}</p>
+            </div>
           </div>
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="ml-auto p-2 text-gray-400 hover:text-red-600 transition-colors"
-              title="Logout"
-            >
-              <span className="material-symbols-outlined text-xl">logout</span>
-            </button>
-          )}
         </div>
       </div>
     </nav>

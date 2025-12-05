@@ -1,42 +1,23 @@
 import React, { useState, useMemo } from 'react';
 import Sidebar from '../common/Sidebar';
 import Header from '../common/Header';
-import { api } from '../../api';
-
-interface SystemUser {
-  id: string;
-  name: string;
-  email: string;
-  avatarUrl: string;
-  role: 'App Manager' | 'App Owner' | 'Business Owner' | 'Admin';
-  department: string;
-  status: 'Active' | 'Inactive';
-  lastLogin: string;
-}
-
-interface SystemApplication {
-  id: string;
-  name: string;
-  owner: string;
-  users: number;
-  status: string;
-}
+import { useData, SystemUser, Application } from '../context/DataContext';
 
 interface Props {
   onLogout: () => void;
 }
 
 const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
+  const { systemUsers, applications, reviewCycles, addSystemUser, updateSystemUser, deleteSystemUser, addApplication } = useData();
   const [currentView, setCurrentView] = useState<'dashboard' | 'users' | 'applications' | 'cycles'>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
 
   // Modal States
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
-
+  
   // Application Modal State
   const [isAddAppModalOpen, setIsAddAppModalOpen] = useState(false);
 
@@ -50,7 +31,7 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
   });
 
   // Form State for Applications
-  const [appFormData, setAppFormData] = useState<Partial<SystemApplication>>({
+  const [appFormData, setAppFormData] = useState<Partial<Application>>({
     name: '',
     owner: '',
     status: 'Active',
@@ -63,75 +44,26 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
     avatar: 'https://ui-avatars.com/api/?name=System+Admin&background=111827&color=fff'
   };
 
-  const [users, setUsers] = useState<SystemUser[]>([]);
-  const [applications, setApplications] = useState<SystemApplication[]>([]);
-
-  // Fetch Data
-  React.useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [usersData, appsData] = await Promise.all([
-          api.getAppManagerUsers(),
-          api.getApplications()
-        ]);
-
-        const mappedUsers: SystemUser[] = usersData.map((u: any) => ({
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          avatarUrl: u.avatarUrl,
-          role: u.role as any,
-          department: 'General', // Default as API might not return it yet
-          status: u.status,
-          lastLogin: u.lastLogin || 'Never'
-        }));
-
-        const mappedApps: SystemApplication[] = appsData.map((a: any) => ({
-          id: a.id.toString(),
-          name: a.name,
-          owner: 'Unassigned', // API doesn't have owner yet
-          users: a.userCount || 0,
-          status: a.status || 'Active'
-        }));
-
-        setUsers(mappedUsers);
-        setApplications(mappedApps);
-      } catch (error) {
-        console.error("Failed to fetch dashboard data", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  const reviewCycles = [
-    { name: 'Q3 2024 Security Review', startDate: '2024-07-01', endDate: '2024-09-30', status: 'Active', progress: 75 },
-    { name: 'Q2 2024 User Audit', startDate: '2024-04-01', endDate: '2024-06-30', status: 'Completed', progress: 100 },
-    { name: 'Q4 2023 Annual Certification', startDate: '2023-10-01', endDate: '2023-12-31', status: 'Completed', progress: 100 },
-  ];
-
   // Stats
   const stats = useMemo(() => {
     return {
-      total: users.length,
-      appManagers: users.filter(u => u.role === 'App Manager').length,
-      appOwners: users.filter(u => u.role === 'App Owner').length,
-      businessOwners: users.filter(u => u.role === 'Business Owner').length,
+      total: systemUsers.length,
+      appManagers: systemUsers.filter(u => u.role === 'App Manager').length,
+      appOwners: systemUsers.filter(u => u.role === 'App Owner').length,
+      businessOwners: systemUsers.filter(u => u.role === 'Business Owner').length,
     };
-  }, [users]);
+  }, [systemUsers]);
 
   // Filter
   const filteredUsers = useMemo(() => {
-    if (!searchQuery) return users;
+    if (!searchQuery) return systemUsers;
     const q = searchQuery.toLowerCase();
-    return users.filter(user =>
-      user.name.toLowerCase().includes(q) ||
+    return systemUsers.filter(user => 
+      user.name.toLowerCase().includes(q) || 
       user.email.toLowerCase().includes(q) ||
       user.role.toLowerCase().includes(q)
     );
-  }, [users, searchQuery]);
+  }, [systemUsers, searchQuery]);
 
   // Handlers for Users
   const handleAddUser = () => {
@@ -150,57 +82,34 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
     setIsDeleteModalOpen(true);
   };
 
-  const submitAddUser = async () => {
-    try {
-      const payload = {
-        name: formData.name || 'New User',
-        email: formData.email || '',
-        role: formData.role,
-        business_user_id: `EXT${Date.now().toString().slice(-5)}`, // Auto-generate if needed by backend schema
-        application_id: 1, // Default, as Admin adds global users
-        status: formData.status
-      };
-
-      const response = await api.createUser(payload);
-      // Refresh list
-      const usersData = await api.getAppManagerUsers();
-      const mappedUsers: SystemUser[] = usersData.map((u: any) => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        avatarUrl: u.avatarUrl,
-        role: u.role as any,
-        department: 'General',
-        status: u.status,
-        lastLogin: u.lastLogin || 'Never'
-      }));
-      setUsers(mappedUsers);
-      setIsAddModalOpen(false);
-    } catch (error) {
-      console.error("Failed to create user", error);
-      alert("Failed to create user. Please try again.");
-    }
+  const submitAddUser = () => {
+    const newUser: SystemUser = {
+      id: Date.now().toString(),
+      name: formData.name || 'New User',
+      email: formData.email || '',
+      avatarUrl: 'https://ui-avatars.com/api/?background=random&name=' + (formData.name || 'User'),
+      role: formData.role as SystemUser['role'],
+      department: formData.department || 'General',
+      status: formData.status as 'Active' | 'Inactive',
+      lastLogin: 'Never'
+    };
+    addSystemUser(newUser);
+    setIsAddModalOpen(false);
   };
 
   const submitEditUser = () => {
     if (selectedUser) {
-      setUsers(users.map(u => u.id === selectedUser.id ? { ...u, ...formData } as SystemUser : u));
+      updateSystemUser({ ...selectedUser, ...formData } as SystemUser);
       setIsEditModalOpen(false);
       setSelectedUser(null);
     }
   };
 
-  const submitDeleteUser = async () => {
+  const submitDeleteUser = () => {
     if (selectedUser) {
-      try {
-        await api.deleteUser(selectedUser.id);
-        setUsers(users.filter(u => u.id !== selectedUser.id));
-        setIsDeleteModalOpen(false);
-        setSelectedUser(null);
-      } catch (error) {
-        console.error("Failed to delete user", error);
-        alert("Failed to delete user.");
-      }
+      deleteSystemUser(selectedUser.id);
+      setIsDeleteModalOpen(false);
+      setSelectedUser(null);
     }
   };
 
@@ -211,14 +120,15 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
   };
 
   const submitAddApplication = () => {
-    const newApp: SystemApplication = {
+    const newApp: Application = {
       id: Date.now().toString(),
       name: appFormData.name || 'New Application',
       owner: appFormData.owner || 'Unassigned',
       users: Number(appFormData.users) || 0,
-      status: appFormData.status || 'Active',
+      status: (appFormData.status as any) || 'Active',
+      lastUpdated: 'Just now'
     };
-    setApplications([...applications, newApp]);
+    addApplication(newApp);
     setIsAddAppModalOpen(false);
   };
 
@@ -229,45 +139,45 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
         user={userProfile}
         onLogout={onLogout}
         menuItems={[
-          {
-            icon: 'dashboard',
-            label: 'Dashboard',
-            active: currentView === 'dashboard',
+          { 
+            icon: 'dashboard', 
+            label: 'Dashboard', 
+            active: currentView === 'dashboard', 
             filled: currentView === 'dashboard',
-            onClick: () => setCurrentView('dashboard')
+            onClick: () => setCurrentView('dashboard') 
           },
-          {
-            icon: 'manage_accounts',
-            label: 'Role Management',
-            active: currentView === 'users',
+          { 
+            icon: 'manage_accounts', 
+            label: 'Role Management', 
+            active: currentView === 'users', 
             filled: currentView === 'users',
-            onClick: () => setCurrentView('users')
+            onClick: () => setCurrentView('users') 
           },
-          {
-            icon: 'apps',
-            label: 'Applications',
-            active: currentView === 'applications',
+          { 
+            icon: 'apps', 
+            label: 'Applications', 
+            active: currentView === 'applications', 
             filled: currentView === 'applications',
-            onClick: () => setCurrentView('applications')
+            onClick: () => setCurrentView('applications') 
           },
-          {
-            icon: 'autorenew',
-            label: 'Review Cycles',
-            active: currentView === 'cycles',
+          { 
+            icon: 'autorenew', 
+            label: 'Review Cycles', 
+            active: currentView === 'cycles', 
             filled: currentView === 'cycles',
-            onClick: () => setCurrentView('cycles')
+            onClick: () => setCurrentView('cycles') 
           },
         ]}
       />
-
+      
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         <Header avatarUrl={userProfile.avatar} />
-
+        
         {/* Mobile Navigation */}
         <div className="md:hidden flex gap-2 p-2 bg-white border-b overflow-x-auto">
-          <button onClick={() => setCurrentView('dashboard')} className={`px-3 py-1 rounded whitespace-nowrap ${currentView === 'dashboard' ? 'bg-primary text-white' : 'bg-gray-100'}`}>Dashboard</button>
-          <button onClick={() => setCurrentView('users')} className={`px-3 py-1 rounded whitespace-nowrap ${currentView === 'users' ? 'bg-primary text-white' : 'bg-gray-100'}`}>Roles</button>
-          <button onClick={() => setCurrentView('applications')} className={`px-3 py-1 rounded whitespace-nowrap ${currentView === 'applications' ? 'bg-primary text-white' : 'bg-gray-100'}`}>Applications</button>
+           <button onClick={() => setCurrentView('dashboard')} className={`px-3 py-1 rounded whitespace-nowrap ${currentView === 'dashboard' ? 'bg-primary text-white' : 'bg-gray-100'}`}>Dashboard</button>
+           <button onClick={() => setCurrentView('users')} className={`px-3 py-1 rounded whitespace-nowrap ${currentView === 'users' ? 'bg-primary text-white' : 'bg-gray-100'}`}>Roles</button>
+           <button onClick={() => setCurrentView('applications')} className={`px-3 py-1 rounded whitespace-nowrap ${currentView === 'applications' ? 'bg-primary text-white' : 'bg-gray-100'}`}>Applications</button>
         </div>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
@@ -281,20 +191,20 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="bg-white p-6 rounded-xl border border-border-light shadow-sm">
-                  <p className="text-text-light-secondary text-sm font-medium">Total Managers</p>
-                  <p className="text-text-light-primary text-3xl font-bold mt-2">{stats.total}</p>
+                   <p className="text-text-light-secondary text-sm font-medium">Total Managers</p>
+                   <p className="text-text-light-primary text-3xl font-bold mt-2">{stats.total}</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl border border-border-light shadow-sm border-l-4 border-l-blue-500">
-                  <p className="text-text-light-secondary text-sm font-medium">App Managers</p>
-                  <p className="text-blue-600 text-3xl font-bold mt-2">{stats.appManagers}</p>
+                   <p className="text-text-light-secondary text-sm font-medium">App Managers</p>
+                   <p className="text-blue-600 text-3xl font-bold mt-2">{stats.appManagers}</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl border border-border-light shadow-sm border-l-4 border-l-purple-500">
-                  <p className="text-text-light-secondary text-sm font-medium">App Owners</p>
-                  <p className="text-purple-600 text-3xl font-bold mt-2">{stats.appOwners}</p>
+                   <p className="text-text-light-secondary text-sm font-medium">App Owners</p>
+                   <p className="text-purple-600 text-3xl font-bold mt-2">{stats.appOwners}</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl border border-border-light shadow-sm border-l-4 border-l-orange-500">
-                  <p className="text-text-light-secondary text-sm font-medium">Business Owners</p>
-                  <p className="text-orange-600 text-3xl font-bold mt-2">{stats.businessOwners}</p>
+                   <p className="text-text-light-secondary text-sm font-medium">Business Owners</p>
+                   <p className="text-orange-600 text-3xl font-bold mt-2">{stats.businessOwners}</p>
                 </div>
               </div>
 
@@ -326,15 +236,15 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
               <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col sm:flex-row justify-between gap-4">
                 <div className="relative w-full sm:w-72">
                   <span className="material-symbols-outlined absolute left-2 top-2.5 text-gray-400">search</span>
-                  <input
-                    type="text"
-                    placeholder="Search roles..."
+                  <input 
+                    type="text" 
+                    placeholder="Search roles..." 
                     className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary focus:border-primary w-full"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
-                <button
+                <button 
                   onClick={handleAddUser}
                   className="flex items-center justify-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-primary-dark transition-colors"
                 >
@@ -370,31 +280,33 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.role === 'App Manager' ? 'bg-blue-100 text-blue-800' :
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              user.role === 'App Manager' ? 'bg-blue-100 text-blue-800' :
                               user.role === 'App Owner' ? 'bg-purple-100 text-purple-800' :
-                                user.role === 'Business Owner' ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-800'
-                              }`}>
+                              user.role === 'Business Owner' ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
                               {user.role}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{user.department}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${user.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                              }`}>
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                              user.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                            }`}>
                               {user.status}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.lastLogin}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <button
+                              <button 
                                 onClick={() => handleEditUser(user)}
                                 className="p-1 text-gray-400 hover:text-primary"
                                 title="Edit"
                               >
                                 <span className="material-symbols-outlined text-lg">edit</span>
                               </button>
-                              <button
+                              <button 
                                 onClick={() => handleDeleteUser(user)}
                                 className="p-1 text-gray-400 hover:text-red-600"
                                 title="Delete"
@@ -411,104 +323,105 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
               </div>
             </div>
           ) : currentView === 'applications' ? (
-            <div className="max-w-7xl mx-auto flex flex-col gap-6">
-              <div>
-                <h1 className="text-text-light-primary text-2xl font-bold">System Applications</h1>
-                <p className="text-gray-500 mt-1">Global registry of all applications managed in the system.</p>
-              </div>
+             <div className="max-w-7xl mx-auto flex flex-col gap-6">
+               <div>
+                  <h1 className="text-text-light-primary text-2xl font-bold">System Applications</h1>
+                  <p className="text-gray-500 mt-1">Global registry of all applications managed in the system.</p>
+               </div>
+               
+               {/* Applications Toolbar */}
+               <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col sm:flex-row justify-between gap-4">
+                  <div className="relative w-full sm:w-72">
+                    <span className="material-symbols-outlined absolute left-2 top-2.5 text-gray-400">search</span>
+                    <input 
+                      type="text" 
+                      placeholder="Search applications..." 
+                      className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary focus:border-primary w-full"
+                    />
+                  </div>
+                  <button 
+                    onClick={handleAddApplication}
+                    className="flex items-center justify-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-primary-dark transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-lg">add_box</span>
+                    Add Application
+                  </button>
+               </div>
 
-              {/* Applications Toolbar */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col sm:flex-row justify-between gap-4">
-                <div className="relative w-full sm:w-72">
-                  <span className="material-symbols-outlined absolute left-2 top-2.5 text-gray-400">search</span>
-                  <input
-                    type="text"
-                    placeholder="Search applications..."
-                    className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary focus:border-primary w-full"
-                  />
-                </div>
-                <button
-                  onClick={handleAddApplication}
-                  className="flex items-center justify-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-primary-dark transition-colors"
-                >
-                  <span className="material-symbols-outlined text-lg">add_box</span>
-                  Add Application
-                </button>
-              </div>
-
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                <table className="w-full text-left">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Application</th>
-                      <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">App Owner</th>
-                      <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Active Users</th>
-                      <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {applications.map((app, idx) => (
-                      <tr key={idx}>
-                        <td className="px-6 py-4 font-medium">{app.name}</td>
-                        <td className="px-6 py-4 text-gray-500">{app.owner}</td>
-                        <td className="px-6 py-4 text-gray-500">{app.users}</td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${app.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {app.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                    {applications.length === 0 && (
+               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-gray-500">No applications found.</td>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Application</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">App Owner</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Active Users</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Status</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {applications.map((app, idx) => (
+                        <tr key={idx}>
+                          <td className="px-6 py-4 font-medium">{app.name}</td>
+                          <td className="px-6 py-4 text-gray-500">{app.owner}</td>
+                          <td className="px-6 py-4 text-gray-500">{app.users}</td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${app.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                              {app.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {applications.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-8 text-center text-gray-500">No applications found.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+               </div>
+             </div>
           ) : (
             <div className="max-w-7xl mx-auto flex flex-col gap-8">
-              <div>
-                <h1 className="text-text-light-primary text-2xl font-bold">Review Cycle Config</h1>
-                <p className="text-gray-500 mt-1">Configure and monitor system-wide review cycles.</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                <table className="w-full text-left">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Cycle Name</th>
-                      <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Duration</th>
-                      <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Status</th>
-                      <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Completion</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {reviewCycles.map((cycle, idx) => (
-                      <tr key={idx}>
-                        <td className="px-6 py-4 font-medium">{cycle.name}</td>
-                        <td className="px-6 py-4 text-gray-500">{cycle.startDate} - {cycle.endDate}</td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cycle.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                            {cycle.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-24 bg-gray-200 rounded-full h-2">
-                              <div className="bg-primary h-2 rounded-full" style={{ width: `${cycle.progress}%` }}></div>
-                            </div>
-                            <span className="text-xs text-gray-500">{cycle.progress}%</span>
-                          </div>
-                        </td>
+               <div>
+                  <h1 className="text-text-light-primary text-2xl font-bold">Review Cycle Config</h1>
+                  <p className="text-gray-500 mt-1">Configure and monitor system-wide review cycles.</p>
+               </div>
+               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Cycle Name</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Duration</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Status</th>
+                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Completion</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {reviewCycles.map((cycle, idx) => (
+                        <tr key={idx}>
+                          <td className="px-6 py-4 font-medium">{cycle.name}</td>
+                          <td className="px-6 py-4 text-gray-500">{cycle.startDate} - {cycle.endDate}</td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              cycle.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {cycle.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                             <div className="flex items-center gap-2">
+                              <div className="w-24 bg-gray-200 rounded-full h-2">
+                                <div className="bg-primary h-2 rounded-full" style={{ width: `${cycle.progress}%` }}></div>
+                              </div>
+                              <span className="text-xs text-gray-500">{cycle.progress}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+               </div>
+             </div>
           )}
         </main>
       </div>
@@ -521,28 +434,28 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Full Name</label>
-                <input
-                  type="text"
+                <input 
+                  type="text" 
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm p-2 border"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Email Address</label>
-                <input
-                  type="email"
+                <input 
+                  type="email" 
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm p-2 border"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Role Type</label>
-                <select
+                <select 
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm p-2 border"
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as SystemUser['role'] })}
+                  onChange={(e) => setFormData({...formData, role: e.target.value as SystemUser['role']})}
                 >
                   <option value="App Manager">App Manager</option>
                   <option value="App Owner">App Owner</option>
@@ -552,19 +465,19 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Department</label>
-                <input
-                  type="text"
+                <input 
+                  type="text" 
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm p-2 border"
                   value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  onChange={(e) => setFormData({...formData, department: e.target.value})}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Status</label>
-                <select
+                <select 
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm p-2 border"
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'Active' | 'Inactive' })}
+                  onChange={(e) => setFormData({...formData, status: e.target.value as 'Active' | 'Inactive'})}
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
@@ -572,13 +485,13 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
-              <button
+              <button 
                 onClick={() => { setIsAddModalOpen(false); setIsEditModalOpen(false); }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
               >
                 Cancel
               </button>
-              <button
+              <button 
                 onClick={isAddModalOpen ? submitAddUser : submitEditUser}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark"
               >
@@ -597,40 +510,40 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Application Name</label>
-                <input
-                  type="text"
+                <input 
+                  type="text" 
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm p-2 border"
                   value={appFormData.name}
-                  onChange={(e) => setAppFormData({ ...appFormData, name: e.target.value })}
+                  onChange={(e) => setAppFormData({...appFormData, name: e.target.value})}
                   placeholder="e.g. Salesforce, Jira"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">App Owner</label>
-                <input
-                  type="text"
+                <input 
+                  type="text" 
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm p-2 border"
                   value={appFormData.owner}
-                  onChange={(e) => setAppFormData({ ...appFormData, owner: e.target.value })}
+                  onChange={(e) => setAppFormData({...appFormData, owner: e.target.value})}
                   placeholder="Full Name"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Initial Users</label>
-                <input
-                  type="number"
+                <input 
+                  type="number" 
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm p-2 border"
                   value={appFormData.users}
-                  onChange={(e) => setAppFormData({ ...appFormData, users: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => setAppFormData({...appFormData, users: parseInt(e.target.value) || 0})}
                   min="0"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Status</label>
-                <select
+                <select 
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm p-2 border"
                   value={appFormData.status}
-                  onChange={(e) => setAppFormData({ ...appFormData, status: e.target.value })}
+                  onChange={(e) => setAppFormData({...appFormData, status: e.target.value as any})}
                 >
                   <option value="Active">Active</option>
                   <option value="Maintenance">Maintenance</option>
@@ -639,13 +552,13 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
-              <button
+              <button 
                 onClick={() => setIsAddAppModalOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
               >
                 Cancel
               </button>
-              <button
+              <button 
                 onClick={submitAddApplication}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark"
               >
@@ -668,13 +581,13 @@ const AdminDashboard: React.FC<Props> = ({ onLogout }) => {
               Are you sure you want to remove <strong>{selectedUser.name}</strong> ({selectedUser.role})? This action cannot be undone.
             </p>
             <div className="flex justify-center gap-3">
-              <button
+              <button 
                 onClick={() => setIsDeleteModalOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
               >
                 Cancel
               </button>
-              <button
+              <button 
                 onClick={submitDeleteUser}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
               >
